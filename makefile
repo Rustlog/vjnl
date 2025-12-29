@@ -1,4 +1,4 @@
-.PHONY: install uninstall purge remove bash source install-bash uninstall-project
+.PHONY: install uninstall purge remove bash symlink source install-bash uninstall-project
 
 PROJECT_NAME := vjournal
 PROJECT_PATH := .
@@ -12,7 +12,7 @@ MAN_NAME := $(PROJECT_NAME).$(MAN_SECTION)
 ACTION := $(word 1, $(MAKECMDGOALS))
 METHOD := $(word 2, $(MAKECMDGOALS))
 VALID_ACTIONS := install uninstall build purge remove
-VALID_METHODS := source bash
+VALID_METHODS := source bash symlink
 
 # safety guard
 ifeq ($(MAKELEVEL),0)
@@ -63,27 +63,38 @@ uninstall:
 build:
 	@printf '%s\n' "help2man -N --locale=en_US.UTF-8 $(PROJECT_PATH)/$(PROJECT_NAME) -o ./doc/man/$(MAN_NAME)"
 	@mkdir -p ./doc/man
-	@help2man -N --locale="en_US.UTF-8" $(PROJECT_PATH)/$(PROJECT_NAME) -o ./doc/man/$(MAN_NAME)
+	@help2man -N --locale="en_US.UTF-8" "$(PROJECT_PATH)/$(PROJECT_NAME)" -o ./"doc/man/$(MAN_NAME)"
 
 install-bash:
 	@printf '%s\n' "install -m0755 -oroot -groot $(PROJECT_PATH)/$(PROJECT_NAME) $(BIN_DIR)/$(PROJECT_NAME)"
 	@mkdir -p "$(BIN_DIR)" "$(MAN_DIR)"
-	@{ install -m0755 -oroot -groot $(PROJECT_PATH)/$(PROJECT_NAME) $(BIN_DIR)/$(PROJECT_NAME) && \
+	@{ install -m0755 -oroot -groot "$(PROJECT_PATH)/$(PROJECT_NAME)" "$(BIN_DIR)/$(PROJECT_NAME)" && \
 		printf '[info]: %s\n' "successful install \`$(BIN_DIR)/$(PROJECT_NAME)\`"; } || \
 		printf '[error]: %s\n' "installation failed \`$(BIN_DIR)/$(PROJECT_NAME)\`"
 	@printf '%s\n' "install -m0755 -oroot -groot ./doc/man/$(MAN_NAME) $(MAN_DIR)/$(MAN_NAME)"
-	@{ install -m0755 -oroot -groot ./doc/man/$(MAN_NAME) $(MAN_DIR)/$(MAN_NAME) && \
+	@{ install -m0755 -oroot -groot ."/doc/man/$(MAN_NAME)" "$(MAN_DIR)/$(MAN_NAME)" && \
+		printf '[info]: %s\n' "successful install \`$(MAN_DIR)/$(MAN_NAME)\`"; } || \
+		printf '[error]: %s\n' "installation failed \`$(MAN_DIR)/$(MAN_NAME)\`"
+
+install-symlink:
+	@printf '%s\n' "ln -sf $(shell readlink -f "$(PROJECT_PATH)/$(PROJECT_NAME)") $(BIN_DIR)/$(PROJECT_NAME)"
+	@mkdir -p "$(BIN_DIR)" "$(MAN_DIR)"
+	@{ ln -sf "$(shell readlink -f "$(PROJECT_PATH)/$(PROJECT_NAME)")" "$(BIN_DIR)/$(PROJECT_NAME)" && \
+		printf '[info]: %s\n' "successful created symlink \`$(BIN_DIR)/$(PROJECT_NAME)\`"; } || \
+		printf '[error]: %s\n' "failed to create symlink \`$(BIN_DIR)/$(PROJECT_NAME)\`"
+	@printf '%s\n' "install -m0755 -oroot -groot ./doc/man/$(MAN_NAME) $(MAN_DIR)/$(MAN_NAME)"
+	@{ install -m0755 -oroot -groot ./"doc/man/$(MAN_NAME)" "$(MAN_DIR)/$(MAN_NAME)" && \
 		printf '[info]: %s\n' "successful install \`$(MAN_DIR)/$(MAN_NAME)\`"; } || \
 		printf '[error]: %s\n' "installation failed \`$(MAN_DIR)/$(MAN_NAME)\`"
 
 uninstall-project:
 	@printf '%s\n' "rm $(BIN_DIR)/$(PROJECT_NAME)"
-	@cd $(BIN_DIR) && { { rm ./$(PROJECT_NAME) && \
+	@cd $(BIN_DIR) && { { rm ./"$(PROJECT_NAME)" && \
 		printf '[info]: %s\n' "successful uninstall \`$(BIN_DIR)/$(PROJECT_NAME)\`"; } || \
 		printf '[error]: %s\n' "failed to uninstall \`$(BIN_DIR)/$(PROJECT_NAME)\`"; } || \
 			printf '[error]: %s\n' "failed to chdir \`$(BIN_DIR)\`"
 	@printf '%s\n' "rm $(MAN_DIR)/$(MAN_NAME)"
-	@cd $(MAN_DIR) && { { rm ./$(MAN_NAME) && \
+	@cd $(MAN_DIR) && { { rm ./"$(MAN_NAME)" && \
 		printf '[info]: %s\n' "successful uninstall \`$(MAN_DIR)/$(MAN_NAME)\`"; } || \
 		printf '[error]: %s\n' "failed to uninstall \`$(MAN_DIR)/$(MAN_NAME)\`"; } || \
 			printf '[error]: %s\n' "failed to chdir \`$(MAN_DIR)\`"

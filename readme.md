@@ -20,13 +20,14 @@ Fine for non-sensitive journaling, not for secrets.
 
 ```bash
 curl -f#SL https://raw.githubusercontent.com/Rustlog/vjnl/main/vjournal -o ~/.bin/vjournal
-chmod +x ~/.bin/journal
+chmod +x ~/.bin/vjournal
 ```
 
 ### Examples
 ```bash
 vjournal edit-journal          # today's log (blank template)
 vjournal edit-journal -t blank # explicit blank
+vjournal edit-journal -t default # default template (opiniated maybe)
 vjournal edit linux            # evergreen note "linux"
 vjournal show linux            # pretty view with pager
 vjournal --no-pager show linux # pretty print without pager
