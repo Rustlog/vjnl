@@ -37,7 +37,7 @@ endif
 
 ## methdo must not be empty
 ifeq ($(METHOD),)
-$(error missing method, valid methods: `$(VALID_METHODS)`)
+METHOD := bash
 endif
 
 ## validate method name
@@ -63,7 +63,7 @@ uninstall:
 build:
 	@printf '%s\n' "help2man -N --locale=en_US.UTF-8 $(PROJECT_PATH)/$(PROJECT_NAME) -o ./doc/man/$(MAN_NAME)"
 	@mkdir -p ./doc/man
-	@help2man -N --locale="en_US.UTF-8" "$(PROJECT_PATH)/$(PROJECT_NAME)" -o ./"doc/man/$(MAN_NAME)"
+	@env FULL_USAGE=yes help2man -N --locale="en_US.UTF-8" "$(PROJECT_PATH)/$(PROJECT_NAME)" -o ./"doc/man/$(MAN_NAME)"
 
 install-bash:
 	@printf '%s\n' "install -m0755 -oroot -groot $(PROJECT_PATH)/$(PROJECT_NAME) $(BIN_DIR)/$(PROJECT_NAME)"

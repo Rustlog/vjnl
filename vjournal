@@ -15,10 +15,11 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 # ###############
-# use --help for more
 # @Author: Rustlog
 # @Version: v1.0
 # @Remote: https://github.com/Rustlog/vjnl
+#
+# use --help for more
 # ###############
 
 builtin set -euo pipefail
@@ -31,7 +32,7 @@ D_TEMPLATE_DIR="${D_DATA_DIR}/templates"
 D_KEY_DIR="${D_DATA_DIR}/keys"
 NO_COLOR=1
 PAGER=1
-LOGLEVEL=1
+LOGLEVEL=2
 
 HOME="${HOME:-$(printf ~)}"
 DATE="$(date +%F)"
@@ -54,6 +55,8 @@ builtin readonly HOME DATE SCRIPT_NAME F_TRANSFORM_KEY_FILE F_TEMPLATE_FILE \
 
 # custom pretty logger
 function log() {
+    local is_debug_enabled=0
+    printf '%s\n' "$-" | grep -q "x" && is_debug_enabled=1
     local _type="${1}"; shift
     local _color="" _t=""
     local -i default_level=3
@@ -86,6 +89,7 @@ function log() {
 
     severity="${level[${_type}]:-${default_level}}"
 
+    { is_flag_enabled "${is_debug_enabled}" && set -x; } || true
     (( LOGLEVEL >= severity )) || return 0
 
     printf "[%b%s%b%s]: %b\n" \
@@ -95,7 +99,8 @@ function log() {
 
 # helpful usage message
 function ShowUsage() {
-    local help_length="${1:-short}"
+    FULL_USAGE="${FULL_USAGE:+full}"
+    local help_length="${1:-${FULL_USAGE:-short}}"
 
     log debug "show help menu"
 
@@ -113,9 +118,11 @@ function ShowUsage() {
         "   show-template           show template" \
         "   edit                    infer edit operation smartly" \
         "   show                    infer show operation smartly" \
-        "   delete                  delete given journal" \
-        "   rename                  rename given journal" \
-        "   copy                    copy given journal" \
+        "   cat                     concatenate give journal/template" \
+        "   list                    list contents of a directory (see --full-help)" \
+        "   delete                  delete given journal/template" \
+        "   rename                  rename given journal/template" \
+        "   copy                    copy given journal/template" \
         "${light_brown}options:${nc}" \
         "   -j|--journal            select journal" \
         "   -t|--template           select template" \
@@ -123,7 +130,6 @@ function ShowUsage() {
         "${light_brown}global options:${nc}" \
         "   --loglevel              set loglevel (0-4)" \
         "   --verbose               enable verbose mode (loglevel 3)" \
-        "   --info                  show info messages (loglevel 2)" \
         "   --no-pager              disable pager" \
         "   --color                 enable colors for subsequent operation" \
         "   --no-color              disable colors for subsequent operation" \
@@ -141,33 +147,58 @@ function ShowUsage() {
     local n="${SCRIPT_NAME}"
     printf '%b\n' \
         "   'edit-journal' and 'edit-template' can be used to create new" \
-        "       entries and immediately edit em" \
+        "       entries and immediately edit em. afterwards 'edit' is fine." \
         "   'edit' and 'show' are more generic, so only existing" \
-        "       entries can be edited or shown" \
+        "       entries can be edited or shown." \
+        "    Supports consistent task separated actions: edit-*, copy-*, move-*, rename-* & delete-* ." \
+        "    when creating a journal; '-t' and '-u' are often interchangeable" \
+        "       -u takes priority when both given" \
+        "    when creating a template; '-t' may specify a name; '-u' provides initial content" \
+        "       (literal strings, file path, or another template)" \
+        "    comments can be attached to any logs/journal/template." \
+        "    day= syntax allows specifying the journal date flexibly:" \
+        "       day=tomorrow / day=yesterday   -> GNU-style relative days, (any valid \`date -d 'string'\`)" \
+        "       day=+N                         -> GNU-style N days relative to today" \
+        "       day=+Nd / day=-Nd              -> BSD-style relative days (with -v)" \
+        "       day='-v +3d'                   -> raw date flags passed directly (advanced usage)" \
         "${light_brown}examples:${nc}" \
-        "   ${gray}# create/reuse then edit 'todo'${nc}" \
-        "       ${green}${n}${nc} edit-journal todo" \
-        "       ${green}${n}${nc} edit todo ${gray}# afterwards just 'edit' is fine${nc}" \
-        "   ${gray}# create/reuse then edit with default template for 'todo'${nc}" \
-        "       ${green}${n}${nc} edit-journal todo -t default  " \
-        "   ${gray}# create/reuse then edit 'template1'${nc}" \
-        "       ${green}${n}${nc} edit-template t1  " \
-        "   ${gray}# create/reuse then edit 'template1'${nc}" \
-        "       ${green}${n}${nc} edit-template template1 -t default" \
-        "   ${gray}# fill existing template to new journal entry (here '-t' <==> '-u')${nc}" \
-        "       ${green}${n}${nc} edit-journal todo-project -t t1" \
-        "   ${gray}# use given template for new journal entry (here '-t' <==> '-u')${nc}" \
-        "       ${green}${n}${nc} edit-journal todo-project -t /path/to/my/template" \
-        "   ${gray}# pretty print the content of journal or template${nc}" \
-        "       ${green}${n}${nc} show todo-project            ${gray}# pager enabled by default${nc}" \
-        "       ${green}${n}${nc} show --no-pager todo-project ${gray}# disable pager${nc}" \
+        "   ${gray}# creating and editing journals/templates${nc}" \
+        "       ${gray}# create/re-use journal and edit${nc}" \
+        "           ${green}${n}${nc} edit-journal todo" \
+        "           ${green}${n}${nc} edit todo ${gray}# afterwards just 'edit' is fine${nc}" \
+        "       ${gray}# create/re-use and edit journal with default template${nc}" \
+        "           ${green}${n}${nc} edit-journal todo -t default" \
+        "       ${gray}# create/re-use template and edit using default template${nc}" \
+        "           ${green}${n}${nc} edit-template template1 -t default" \
+        "       ${gray}# fill existing template to new journal${nc}" \
+        "           ${green}${n}${nc} edit-journal todo-project -t t1" \
+        "   ${gray}# create custom templates${nc}" \
+        "       ${gray}# create blank template (no content)${nc}" \
+        "           ${green}${n}${nc} edit-template" \
+        "       ${gray}# create new default (template0) template using default contents (supports --comment)${nc}" \
+        "           ${green}${n}${nc} edit-template -t default -u default" \
+        "   ${gray}# delete / copy / rename / listing & viewing${nc}" \
+        "       ${gray}# file navigation${nc}" \
+        "           ${green}${n}${nc} copy life life_backup     ${gray}# clone life${nc}" \
+        "           ${green}${n}${nc} delete life               ${gray}# delete life :(${nc}" \
+        "           ${green}${n}${nc} rename life_backup life   ${gray}# revive life :)${nc}" \
+        "       ${gray}# pretty print the content of journal or template${nc}" \
+        "           ${green}${n}${nc} show todo-project            ${gray}# pager enabled by default${nc}" \
+        "           ${green}${n}${nc} --no-pager show todo-project ${gray}# disable pager${nc}" \
+        "           ${green}${n}${nc} cat todo-project             ${gray}# concatenate${nc}" \
+        "       ${gray}# list content of known directories (available options: logs/journals/templates)${nc}" \
+        "           ${green}${n}${nc} list logs                    ${gray}# dated logs in logs/ dir with comments${nc}" \
+        "   ${gray}# extras${nc}" \
+        "           ${gray}# create new & use default template & add a inline comment${nc}" \
+        "       ${green}${n}${nc} edit-journal project-work -t default -c 'projects related plans'" \
+        "           ${gray}# create new & use given template & add a inline comment${nc}" \
+        "       ${green}${n}${nc} edit-journal prod-script -t /path/to/my/template_file -c 'design and behaviour of prod script'" \
         ""
 }
 
 # helper for fetching metadata about this tool
 function ShowInfo() {
     local info_type="${1:-version}"
-
     case "${info_type}" in
         version)    printf '%s\n' "${VERSION}" ;;
         author)     printf '%s\n' "${AUTHOR}" ;;
@@ -234,6 +265,63 @@ function require_var() {
     return 1
 }
 
+# HELPER function -- Variable is not empty
+function is_var_empty() {
+    local var="${1:-}" _type="${2:-}" msg="${3:-}"
+    [[ -n "${var}" ]] || return 0
+    [[ -n "${msg}" ]] && log "${_type}" "${msg}"
+    return 1
+}
+
+# blank template with date only
+function BlankTemplate() {
+    local -i is_debug_enabled=0
+    printf '%s\n' "$-" | grep -q "x" && is_debug_enabled=1
+    { is_flag_enabled "${is_debug_enabled}" && set +x; } || true
+    cat << EOF
+# $(date +"Date: %F, Created on: %T (%I:%M:%S_%p)")
+
+EOF
+    { is_flag_enabled "${is_debug_enabled}" && set -x; } || true
+}
+
+# default template as starter
+function DefaultTemplate() {
+    local -i is_debug_enabled=0
+    printf '%s\n' "$-" | grep -q "x" && is_debug_enabled=1
+    { is_flag_enabled "${is_debug_enabled}" && set +x; } || true
+    cat << EOF
+# $(date +"Date: %F, Created on: %T (%I:%M:%S_%p)")
+
+## @@ dump @@
+(just raw thoughts)
+
+## @@ what matters today @@
+( elaborate )
+
+## @@ work/moves @@
+-
+-
+-
+
+## @@ notes/scratch @@
+(anything: ideas, errors, thoughts)
+
+## @@ insights @@
+(something: observed, impactful)
+
+## @@ end @@
+done:
+still open:
+tomorrow:
+maybe tomorrow:
+
+# vim: sts=4 sw=4 ft=vdf et:
+
+EOF
+    { is_flag_enabled "${is_debug_enabled}" && set -x; } || true
+}
+
 # generate a chipher key for default key
 function GenerateKey() {
     log debug "generate key"
@@ -280,18 +368,31 @@ function DecodeFile() {
 
 # smart journal edit
 function EditJournal() {
-    local journal_file="${1}" template="${2:-}" \
-        content="${3:-}" file=""
-    local journal_dir="${journal_file%/*}" journal_name="${journal_file##*/}"
-    local tmp_file="${journal_dir}/${journal_name}.${TMP_NAME}"
+    local journal_name="${1:-}" template="${2:-}" \
+        content="${3:-}" comment="${4:-}"
+    local journal_dir="" tmp_file="" file=""
 
-    log debug "editing journal '${journal_file}'"
+    require_var "${journal_name}" || \
+        { log error "cannot edit journal: no journal given"; return 1; }
+
+    if require_regular_file "${journal_name}"; then
+        journal_file="${journal_name}"
+    elif ! journal_file="$(DispatchPath journal "${journal_name}" no)"; then
+        journal_file="${D_SPLS_DIR}/${journal_name}"
+    fi
+
+    journal_file="${journal_file:-${F_JOURNAL_FILE}}"
+
+    journal_dir="${journal_file%/*}" journal_name="${journal_file##*/}"
+    tmp_file="${journal_dir}/${journal_name}.${TMP_NAME}" file=""
+
+    log debug "using journal '${journal_file}'"
 
     touch "${tmp_file}" && chmod 0600 "${tmp_file}"
     require_file "${F_TRANSFORM_KEY_FILE}" || GenerateKey
     if require_file "${journal_file}"; then
         DecodeFile "${journal_file}" "${tmp_file}"
-        log info "editing '${journal_file}'"
+        log info "editing journal '${journal_file}'"
         "${EDITOR:-vim}" "${tmp_file}" || log error "editor returned failed status"
         EncodeFile "${tmp_file}" "${journal_file}"
         rm -f "${tmp_file}" &> /dev/null; return 0
@@ -311,7 +412,7 @@ function EditJournal() {
             log debug "copying template '${D_TEMPLATE_DIR}/${template}' to '${tmp_file%.*}'"
             cp "${D_TEMPLATE_DIR}/${template}" "${tmp_file}"
         else
-            if file="$(FindTemplate "${template}" 2>/dev/null)"; then
+            if file="$(FindTemplate "${template}")"; then
             { require_file "${file}" && cp "${file}" "${tmp_file}"; } || \
                 { log error "template doesn't exist or empty '${file}'"; return 1; }
             else
@@ -324,63 +425,36 @@ function EditJournal() {
         log debug "using blank template"
         BlankTemplate &> "${tmp_file}"
     fi
-    log info "editing '${journal_file}'"
+    log info "editing journal '${journal_file}'"
+    if require_var "${comment}"; then
+        comment="#comment|${comment}|"
+        sed -i "2a${comment}\n" "${tmp_file}"
+    fi
     "${EDITOR:-vim}" "${tmp_file}" || log error "editor returned failed status"
     EncodeFile "${tmp_file}" "${journal_file}"
     rm -f "${tmp_file}" &> /dev/null; return 0
 }
 
-# pretty print given file
-function PrettyPrintFile() {
-    local journal_file="${1}" should_decode="${2:-yes}"
-    local journal_dir="${journal_file%/*}" journal_name="${journal_file##*/}"
-    local tmp_file="${journal_dir}/${journal_name}.${TMP_NAME}" color="never"
-    touch "${tmp_file}" && chmod 0600 "${tmp_file}"
-    is_flag_enabled "$NO_COLOR" || color="always"
-    { is_flag_enabled "$PAGER" && log info "viewing '${journal_file}'"; } || \
-        log info "showing '${journal_file}'"
-    if require_regular_file "${journal_file}"; then
-        if ! require_file "${journal_file}"; then
-            log warn "'${journal_file}' is empty"; return 1
-        fi
-    fi
-    [[ "${should_decode}" == "yes" ]] && DecodeFile "${journal_file}" "${tmp_file}"
-    if command -v "bat" &> /dev/null; then
-        if is_flag_enabled "$PAGER"; then
-            bat --decorations=never --paging=never \
-                --color="${color}" --language=bash "${tmp_file}" | less -c -
-        else
-            bat --decorations=never --paging=never \
-                --color="${color}" --language=bash "${tmp_file}"
-        fi
-    else
-        if is_flag_enabled "$PAGER"; then
-            less -c "${tmp_file}"
-        else
-            cat "${tmp_file}"
-        fi
-    fi
-    [[ "${should_decode}" == "yes" ]] && { EncodeFile "${tmp_file}" "${journal_file}"; \
-        rm -f "${tmp_file}" 2> /dev/null; }
-}
-
 # edit tempalte
 function EditTemplate() {
-    local template_name="${1:-}" use_template="${2:-}"
+    local template_name="${1:-}" use_template="${2:-}" comment="${3:-}"
     local template_file=""
 
     require_var "${template_name}" || \
         { log error "cannot edit template: no template given"; return 1; }
 
-    log debug "edit template '${template_name}'"
+    if require_regular_file "${template_name}"; then
+        template_file="${journal_name}"
+    elif ! template_file="$(DispatchPath template "${template_name}")"; then
+        template_file="${D_TEMPLATE_DIR}/${template_name}"
+    fi
 
-    template_file="$(FindTemplate "${template_name}" 2>/dev/null)" || \
-        template_file="${F_TEMPLATE_FILE}"
+    template_file="${template_file:-${F_TEMPLATE_FILE}}"
 
     log debug "using template '${template_file}'"
 
     if require_file "${template_file}"; then
-        log debug "editing template '${template_file}'"
+        log info "editing template '${template_file}'"
         "${EDITOR:-vim}" "${template_file}"; return 0
     fi
 
@@ -398,140 +472,276 @@ function EditTemplate() {
             printf '%s\n' "${use_template}" &> "${template_file}"
         fi
     fi
-    log info "editing '${template_file}'"
+    log info "editing template '${template_file}'"
+    if require_var "${comment}"; then
+        comment="#comment|${comment}|"
+        sed -i "2a${comment}\n" "${template_file}"
+    fi
     "${EDITOR:-vim}" "${template_file}"
+}
+
+# pretty print given file
+function PrettyPrintFile() {
+    local given_file="${1}" method="${2:-pager}" should_decode=""
+    local using_dir="${given_file%/*}" journal_name="${given_file##*/}"
+    local use_file="${given_file}" color="never"
+
+    is_flag_enabled "$NO_COLOR" || color="always"
+    is_flag_enabled "$PAGER" || method="unknown"
+
+    if [[ "${method}" == pager ]];then
+        log info "viewing '${given_file}'"
+    elif [[ "${method}" == cat ]];then
+        log info "concatenating '${given_file}'"
+    else
+        log info "showing '${given_file}'"
+    fi
+
+    if require_regular_file "${given_file}"; then
+        if ! require_file "${given_file}"; then
+            log warn "'${given_file}' is empty"; return 1
+        fi
+    fi
+
+    [[ "${using_dir:$((${#using_dir}-1)):1}" == "/" ]] && using_dir="${using_dir:0:-1}"
+
+    if [[ "${using_dir}" =~ ^(${D_LOG_DIR}|${D_SPLS_DIR})$ ]]; then
+        should_decode=yes
+    else should_decode=no
+    fi
+
+    if [[ "${should_decode}" == "yes" ]]; then
+        use_file="${using_dir}/${journal_name}.${TMP_NAME}"
+        touch "${use_file}" && chmod 0600 "${use_file}"
+        DecodeFile "${given_file}" "${use_file}"
+    fi
+    if command -v "bat" &> /dev/null; then
+        if is_flag_enabled "$PAGER" && [[ "${method}" == pager ]] && \
+                command -v "less" &> /dev/null; then
+            bat --decorations=never --paging=never \
+                --color="${color}" --language=bash "${use_file}" | less -c -
+        else
+            bat --decorations=never --paging=never \
+                --color="${color}" --language=bash "${use_file}"
+        fi
+    else
+        if is_flag_enabled "$PAGER" && [[ "${method}" == pager ]] && \
+            command -v "less" &> /dev/null; then
+            less -c "${use_file}"
+        else
+            cat "${use_file}"
+        fi
+    fi
+    [[ "${should_decode}" == "yes" ]] && { EncodeFile "${use_file}" "${given_file}"; \
+        rm -f "${use_file}" 2> /dev/null; }
+}
+
+function ListDirectory() {
+    local list_what="${1:-}"
+    local dir="" comment="" file_name="" file="" key="" \
+        pattern="#comment|.*|"
+    local -i should_decode=0
+    local -a available_files=()
+    if [[ "${list_what}" == journal* ]]; then
+        dir="${D_SPLS_DIR}" key="$(<"${F_TRANSFORM_KEY_FILE}")"
+        should_decode=1 pattern="$(tr 'A-Za-z' "${key}" <<< "${pattern}")"
+    elif [[ "${list_what}" == log* ]]; then
+        dir="${D_LOG_DIR}" key="$(<"${F_TRANSFORM_KEY_FILE}")"
+        should_decode=1 pattern="$(tr 'A-Za-z' "${key}" <<< "${pattern}")"
+    elif [[ "${list_what}" == template* ]]; then
+        dir="${D_TEMPLATE_DIR}"
+    else
+        log error "could not find associated directory for the request '${list_what}'"
+        return 1
+    fi
+    require_var "$(find "${dir}" -mindepth 1 -maxdepth 1 -print -quit)" || \
+        { log warn "directory is empty (${dir})"; return 1; }
+    mapfile -t available_files < <(find "${dir}" -mindepth 1 -maxdepth 1 -printf "%p\n")
+    log info "available ${list_what} (${dir})"
+    for file in "${available_files[@]}"; do
+        file_name="${file##*/}"
+        comment="$(grep -o "${pattern}" "${file}" | cut -d'|' -f2 || true)"
+        [[ "$should_decode" -eq 1 ]] && comment="$(tr "${key}" 'A-Za-z' <<< "${comment}")"
+        comment="${comment:+(${comment})}"
+        printf '    %-35s %-20s\n' "${file_name}" "${comment:-[no comment]}"
+    done
 }
 
 # delete a file
 function DeleteFile() {
-    local file_name="${1:-}" dir=""
-    if ! dir="$(FindJournal "${file_name}" dir_only 2>/dev/null)"; then
-        if ! require_regular_file "${D_TEMPLATE_DIR}/${file_name}"; then
-            log error "could not find file '${file_name}'"; return 1
-        fi
-        dir="${D_TEMPLATE_DIR}"
-    fi
-    cd "${dir}" || { log error "failed to chdir to '${dir}'"; return 1; }
-    rm ./"${file_name}" || log error "failed to remove '${file_name}'"
-    log info "removed '${file_name}'"
+    local f_file="${1:-}" t_status="${2:-removed}"
+    local dir=""
+    dir="${f_file%/*}"
+    file_name="${f_file##*/}"
+    require_regular_file "${f_file}" || \
+        { log error "delete failed: no such file '${f_file}'"; return 1; }
+    cd "${dir}" || { log error "failed chdir to '${dir}'"; return 1; }
+    rm ./"${file_name}" || { log error "failed to remove '${file_name}'"; return 1; }
+    log info "${t_status} '${file_name}'"
     return 0
 }
 
 # copy/rename a file
 function FileDo() {
     local operation="${1:-}" name1="${2:-}" name2="${3:-}"
-    local t="" comm=""
+    local f_path="" dir=""
+    local t_status="" t_op="" comm=""
 
-    if [[ "${operation}" == "copy" ]]; then
-        t="copied" comm="cp"
-    elif [[ "${operation}" == "rename" ]]; then
-        t="renamed" comm="mv"
-    else return 1
-    fi
+    resolve_path() {
+        local what="${1:-}"
+        case "${what}" in
+            journal) f_path="$(DispatchPath journal "${name1}" no)" || \
+        { log error "failed to select appropriate journal file '${name1}'"; return 1; } ;;
+            template) f_path="$(DispatchPath template "${name1}")" || \
+        { log error "failed to select appropriate template file '${name1}'"; return 1; } ;;
+            guess) f_path="$(DispatchPath guess "${name1}")" || \
+        { log error "failed to select appropriate file '${name1}'"; return 1; } ;;
+            *) log error "anything else is not welcome."; return 1 ;;
+        esac
+    }
+
+    case "${operation}" in
+        copy)
+            resolve_path guess
+            t_status="copied" t_op="copy" comm="cp"                 ;;
+        copy[_-]journal)
+            resolve_path journal
+            t_status="journal copied" t_op="copy" comm="cp"         ;;
+        copy[_-]template)
+            resolve_path template
+            t_status="template copied" t_op="copy" comm="cp"        ;;
+        rename|move)
+            resolve_path guess
+            t_status="${operation}d" t_op="${operation}" comm="mv"  ;;
+        move[_-]journal)
+            resolve_path journal
+            t_status="journal moved" t_op="move" comm="mv"          ;;
+        move[_-]template)
+            resolve_path template
+            t_status="template moved" t_op="move" comm="mv"         ;;
+        rename[_-]journal)
+            resolve_path journal
+            t_status="journal renamed" t_op="rename" comm="mv"      ;;
+        rename[_-]template)
+            resolve_path template
+            t_status="template renamed" t_op="rename" comm="mv"     ;;
+        delete)
+            resolve_path guess || return 1
+            t_status="removed"
+            DeleteFile "${f_path}" "${t_status}" || return 1
+            return 0                                                ;;
+        delete[_-]journal)
+            resolve_path journal || return 1
+            t_status="removed journal"
+            DeleteFile "${f_path}" "${t_status}" || return 1
+            return 0                                                ;;
+        delete[_-]template)
+            t_status="removed template"
+            resolve_path template || return 1
+            DeleteFile "${f_path}" "${t_status}" || return 1
+            return 0                                                ;;
+        *) return 1                                                 ;;
+    esac
+
+    require_var "${name2}" || return 1
 
     log debug "${operation} '${name1}' -> '${name2}'"
 
-    if ! dir="$(FindJournal "${name1}" dir_only 2>/dev/null)"; then
-        if ! require_file "${D_TEMPLATE_DIR}/${name1}"; then
-            log error "could not find file '${name1}'"; return 1
-        fi
-        dir="${D_TEMPLATE_DIR}"
-    fi
-    cd "${dir}" || { log error "failed to chdir to '${dir}'"; return 1; }
-    "${comm}" ./"${name1}" ./"${name2}" || \
-        { log error "failed to ${operation} '${name1}' to '${name2}'"; return 1; }
-    log info "$t '${name1}' -> '${name2}'"
+    dir="${f_path%/*}"
+
+    cd "${dir}" || { log error "failed chdir to '${dir}'"; return 1; }
+    require_regular_file "${name1}" || { log error \
+        "${t_op} failed: no such file '${name1}'"; return 1; }
+    "${comm}" ./"${name1}" "${name2}" || \
+        { log error "failed ${t_op} '${name1}' to '${name2}'"; return 1; }
+    log info "${t_status} '${name1}' -> '${name2}'"
     return 0
-}
-
-# blank template with date only
-function BlankTemplate() {
-    local -i is_debug_enabled=0
-    printf '%s\n' "$-" | grep -q "x" && is_debug_enabled=1
-    { is_flag_enabled "${is_debug_enabled}" && set +x; } || true
-    cat << EOF
-# $(date +"Date: %F, Created on: %T (%I:%M:%S_%p)")
-
-EOF
-    { is_flag_enabled "${is_debug_enabled}" && set -x; } || true
-}
-
-# default template as starter
-function DefaultTemplate() {
-    local -i is_debug_enabled=0
-    printf '%s\n' "$-" | grep -q "x" && is_debug_enabled=1
-    { is_flag_enabled "${is_debug_enabled}" && set +x; } || true
-    cat << EOF
-# $(date +"Date: %F, Created on: %T (%I:%M:%S_%p)")
-
-## @@ dump @@
-(just raw thoughts)
-
-## @@ what matters today @@
-(one sentence)
-
-## @@ work/moves @@
--
--
--
-
-## @@ notes/scratch @@
-(anything: ideas, errors, thoughts)
-
-## @@ insights @@
-(something: observed, impactful)
-
-## @@ end @@
-done:
-still open:
-tomorrow:
-maybe tomorrow:
-
-# vim: sts=4 sw=4 ft=vdf et:
-
-EOF
-    { is_flag_enabled "${is_debug_enabled}" && set -x; } || true
 }
 
 # search template name in paths
 function FindTemplate() {
     local template_name="${1:-}"
 
-    log debug "find template '${template_name}'" 1>&2
-
     require_var "${template_name}" || return 1
 
     if require_file "${template_name}"; then
         printf '%s\n' "${template_name}"; return 0
-    fi
-
-    if [[ "${template_name}" == "default" ]] ; then
+    elif [[ "${template_name}" == "default" ]] ; then
         printf '%s\n' "${F_TEMPLATE_FILE}"; return 0
+    elif require_regular_file "${D_TEMPLATE_DIR}/${template_name}"; then
+        printf '%s\n' "${D_TEMPLATE_DIR}/${template_name}"; return 0
+    else
+        return 1
     fi
-    printf '%s\n' "${D_TEMPLATE_DIR}/${template_name}"; return 0
 }
 
 # search journal name in paths
 function FindJournal() {
     local journal_name="${1:-}"
-    local what="${2:-dir_only}"
-    log debug "find journal '${journal_name}'" 1>&2
-    require_var "${journal_name}" || \
-        { log error "no file given for searching journal"; return 1; }
+    local what="${2:-full_path}"
+    require_var "${journal_name}" || return 1
     print_path() {
         local dir="${1:-}" name="${2:-}"
-        require_var "${dir}" || log error "print_path(): dir not given"
-        require_var "${name}" || log error "print_path(): name not given"
+        require_var "${dir}" || return 1
+        require_var "${name}" || return 1
         case "${what}" in
-            "dir_only") printf '%s\n' "${dir}" ;;
             "full_path") printf '%s\n' "${dir}/${name}" ;;
+            *)           printf '%s\n' "${dir}"         ;;
         esac
     }
-    if require_file "${D_LOG_DIR}/${journal_name}"; then
+
+    if require_regular_file "${journal_name}"; then
+        print_path "${journal_name%/*}" "${journal_name##*/}"; return 0
+    elif [[ "${journal_name}" =~ ^(today|${DATE}|default)$ ]]; then
+        print_path "${D_LOG_DIR}" "${DATE}"
+    elif require_regular_file "${D_LOG_DIR}/${journal_name}"; then
         print_path "${D_LOG_DIR}" "${journal_name}"; return 0
-    elif require_file "${D_SPLS_DIR}/${journal_name}"; then
+    elif require_regular_file "${D_SPLS_DIR}/${journal_name}"; then
         print_path "${D_SPLS_DIR}" "${journal_name}"; return 0
+    elif [[ "${journal_name}" == *=* ]]; then
+        local -a date_flags=()
+        journal_name="${journal_name##*=}"
+        if [[ "${journal_name}" =~ ^[+-][0-9]+d$ ]]; then
+            date_flags+=(-v "${journal_name}")
+        elif [[ "${journal_name}" =~ ^[+-][0-9]+$ ]]; then
+            date_flags+=(-d "${journal_name} day")
+        elif [[ "${journal_name}" == -* ]]; then
+            date_flags+=( ${journal_name:+ ${journal_name}} )
+        elif [[ "${journal_name}" =~ ^[A-Za-z].*$ ]]; then
+            date -d "${journal_name}" +%F &>/dev/null || return 1
+            date_flags+=(-d "${journal_name}")
+        fi
+        (( ${#date_flags[@]} )) || return 1
+        print_path "${D_LOG_DIR}" "$(date "${date_flags[@]}" +%F)"
     else return 1
+    fi
+}
+
+# select journal/template then try a guess
+function DispatchPath() {
+    local which_path="${1:-none}" name="${2:-}" should_exist="${3:-yes}"
+    local f_path=""
+    require_var "$name" || return 1
+    if [[ "${which_path}" == journal* && "${name}" == default ]]; then
+        printf '%s\n' "${F_JOURNAL_FILE}"; return 0
+    elif [[ "${which_path}" == template* && "${name}" == default ]]; then
+        printf '%s\n' "${F_TEMPLATE_FILE}"; return 0
+    elif [[ "${which_path}" == journal* ]]; then
+        f_path="$(FindJournal "${name}")" || return 1
+        [[ "${should_exist}" == yes ]] && \
+            { require_regular_file "${f_path}" || return 1; }
+        printf '%s\n' "${f_path}"; return 0
+    elif [[ "${which_path}" == template* ]]; then
+        f_path="$(FindTemplate "${name}")" || return 1
+        [[ "${should_exist}" == yes ]] && \
+            { require_regular_file "${f_path}" || return 1; }
+        printf '%s\n' "${f_path}"; return 0
+    else
+        f_path="$(FindJournal "${name}")" || \
+            { f_path="$(FindTemplate "${name}")" || return 1; }
+        [[ "${should_exist}" == yes ]] && \
+            { require_regular_file "${f_path}" || return 1; }
+        printf '%s\n' "${f_path}"; return 0
     fi
 }
 
@@ -539,25 +749,26 @@ function FindJournal() {
 function main() {
     local -a args=("${@}")
 
-    local f_journal_file="" journal_name="" \
-        template_name="" t_content=""
+    local journal_name="" template_name="" t_content=""
 
     # Booleans
     local -i edit_journal=0 show_something=0 show_journal=0 select_template=0 \
-        use_something=0 edit_journal=0 edit_something=0 select_journal=0 \
-        edit_template=0 show_template=0 show_journal=0 found_journal=0
+        edit_journal=0 edit_something=0 select_journal=0 edit_template=0 \
+        show_template=0 show_journal=0 list_journals=0 \
+        list_templates=0 cat_template=0 cat_journal=0
 
     # pre-declared temporary variables
-    local name="" name1="" name2="" dir="" \
-        something_value=""
+    local name="" name1="" name2="" dir="" something_value="" \
+        comment_string="" list_something_value="" cat_something_value="" \
+        f_path=""
 
     [[ -t 1 ]] && NO_COLOR=0
 
-    set_val() {
+    consume_val() {
         local -n var_ref index_ref
         var_ref=${1} index_ref=${3}
-        local value="${2}"
-        [[ -n "${value:-}" && "${value:-}" != -* ]] || return 0
+        local value="${2:-}"
+        [[ -n "${value}" && "${value}" != -* ]] || return 0
         # shellcheck disable=SC2034
         var_ref="${value}" index_ref=$((index_ref+1))
     }
@@ -568,45 +779,54 @@ function main() {
     for ((i=0;i<${#args[@]};i++)); do
         arg="${args[i]}"
 
-        if is_flag_disabled "$m"; then
+        if is_var_empty "${m}"; then
             [[ $((${#args[@]}-i)) -ge 1 && -n "${args[i+1]:-}" ]] && \
                 value="${args[i+1]}"
+            if [[ "${arg}" == -*=* ]]; then
+                IFS=$'=' read -r arg value <<< "${arg}"
+                [[ -n "${value}" ]] || \
+                    { log error "'${arg}' requires a value"; return 1; }
+                i=$((i-1))
+            fi
             case "${arg}" in
-                edit) set_val something_value "${value}" i
-                    edit_something=1 m="edit"           ;;
-                show) set_val something_value "${value}" i
-                    show_something=1 m="show"           ;;
-                edit-journal|edit_journal) set_val journal_name "${value}" i
-                    edit_journal=1 m="edit-journal"     ;;
-                edit-template|edit_template) set_val template_name "${value}" i
-                    edit_template=1 m="edit-template"   ;;
-                show-journal|show_journal) set_val journal_name "${value}" i
-                    show_journal=1 m="show-journal"     ;;
-                show-template|show_template) set_val template_name "${value}" i
-                    show_template=1 m="show-template"   ;;
-                delete)
+                edit) consume_val something_value "${value}" i
+                    edit_something=1 m="edit"          ;;
+                show) consume_val something_value "${value}" i
+                    show_something=1 m="show"          ;;
+                cat) consume_val cat_something_value "${value}" i
+                    m="cat"                            ;;
+                cat[_-]template) consume_val cat_something_value "${value}" i
+                    cat_template=1 m="cat-template"    ;;
+                cat[_-]journal) consume_val cat_something_value "${value}" i
+                    cat_journal=1 m="cat-journal"      ;;
+                edit[_-]journal) consume_val journal_name "${value}" i
+                    edit_journal=1 m="edit-journal"    ;;
+                edit[_-]template) consume_val template_name "${value}" i
+                    edit_template=1 m="edit-template"  ;;
+                show[_-]journal) consume_val journal_name "${value}" i
+                    show_journal=1 m="show-journal"    ;;
+                show[_-]template) consume_val template_name "${value}" i
+                    show_template=1 m="show-template"  ;;
+                list) consume_val list_something_value "${value}" i;
+                    m="list"                           ;;
+                list[_-]journal*)
+                    list_journals=1 m="list-journal"   ;;
+                list[_-]template*)
+                    list_templates=1 m="list-template" ;;
+                delete*)
                     require_var "${value}" && i=$((i+1))
                     require_var "${value}" || { log error \
-                        "only do: ${SCRIPT_NAME} delete [journal|template]"; return 1; }
-                    DeleteFile "${value}"; return 0 ;;
-                rename)
+                        "do: ${SCRIPT_NAME} ${arg} [name]"; return 1; }
+                    FileDo "${arg}" "${value}" || return 1
+                    return 0                            ;;
+                copy|rename|move|copy*|rename*|move*)
                     require_var "${value}" && i=$((i+1))
                     [[ ( $((${#args[@]}-i)) -ge 1 && \
-                        ( -n "${args[i+1]}" && "${args[i+1]}" != -* ) ) && -n "${value}" ]] || \
-                            { log error "${SCRIPT_NAME} rename 'old_name' 'new_name'"; return 1; }
+                        ( -n "${args[i+1]:-}" && "${args[i+1]:-}" != -* ) ) && -n "${value}" ]] || \
+                            { log error "do: ${SCRIPT_NAME} ${arg} [old_name] [new_name]"; return 1; }
                     name1="${value}" name2="${args[i+1]}" i=$((i+1))
-                    FileDo rename "${name1}" "${name2}" || \
-                        { log error "Failed to perform rename operation"; return 1; }
-                    return 0 ;;
-                copy)
-                    require_var "${value}" && i=$((i+1))
-                    [[ ( $((${#args[@]}-i)) -ge 1 && \
-                        ( -n "${args[i+1]}" && "${args[i+1]}" != -* ) ) && -n "${value}" ]] || \
-                        { log error "$SCRIPT_NAME --copy 'old_name' 'new_name'"; return 1; }
-                    name1="${value}" name2="${args[i+1]}" i=$((i+1))
-                    FileDo copy "${name1}" "${name2}" || \
-                        { log error "Failed to perform copy operation"; return 1; }
-                    return 0 ;;
+                    FileDo "${arg}" "${name1}" "${name2}" || return 1
+                    return 0                                            ;;
                 --tree*)  TreeView; return 0                            ;;
                 --paging|--pager)       PAGER=1                         ;;
                 --no-paging|--no-pager) PAGER=0                         ;;
@@ -620,8 +840,7 @@ function main() {
                 --showinfo|--show-info|--about) ShowInfo all; return 0  ;;
                 --repo) ShowInfo repo; return 0                         ;;
                 --verbose) LOGLEVEL=3                                   ;;
-                --info)    LOGLEVEL=2                                   ;;
-                --loglevel|--log-level) set_val LOGLEVEL "${value:-2}" i ;;
+                --loglevel|--log-level) consume_val LOGLEVEL "${value}" i ;;
                 *) log error "invalid global option '${arg}'"; return 1 ;;
             esac
 
@@ -639,124 +858,118 @@ function main() {
             [[ -n "${value}" ]] || \
                 { log error "'${arg}' requires a value"; return 1; }
         fi
+        if [[ "${m}" == edit* && "${arg}" =~ ^(-c|--comment)$ ]]; then
+            consume_val comment_string "${value}" i
+            arg="${args[i]:-}"
+            continue
+        fi
         case "${arg}" in
-            -u|--use) set_val t_content "${value}" i; use_something=1               ;;
-            -j|--journal) set_val journal_name "${value}" i; select_journal=1       ;;
-            -t|--template) set_val template_name "${value}" i; select_template=1    ;;
+            -u|--use) consume_val t_content "${value}" i                                ;;
+            -j|--journal) consume_val journal_name "${value}" i; select_journal=1       ;;
+            -t|--template) consume_val template_name "${value}" i; select_template=1    ;;
             *) log error "Invalid argument '${arg}' for '${m}'"; return 1           ;;
         esac
     done
 
+    log debug "loglevel $LOGLEVEL"
+
     [[ "$#" -ne 0 ]] || { log help_info \
         "not sure? look --help you may find it helpful"; return 1; }
 
-    # intent: pick the correct journal file path
-    # use journal_name if possible; fallback to default file
-    # use D_LOG_DIR for today/current date, otherwise D_SPLS_DIR
-    found_journal=1
-    if require_var "${journal_name}"; then
-        if [[ "${journal_name}" == "today" ]]; then
-            f_journal_file="${D_LOG_DIR}/${DATE}"
-        elif [[ "${journal_name}" == "${DATE}" ]]; then
-            f_journal_file="${D_LOG_DIR}/${journal_name}"
-        elif ! f_journal_file="$(FindJournal "${journal_name}" full_path 2>/dev/null)"; then
-            f_journal_file="${D_SPLS_DIR}/${journal_name}"
-        fi
-    else
-        { require_var "${something_value}" && \
-            f_journal_file="$(FindJournal "${something_value}" full_path 2>/dev/null)"; } || \
-            f_journal_file="${F_JOURNAL_FILE}" found_journal=0
-    fi
-
-    log debug "selected journal file '${f_journal_file}'"
-
+    # ensure everything exists in place
     mkdir -p "${D_JOURNAL_DIR}" "${D_DATA_DIR}" "${D_LOG_DIR}" \
         "${D_SPLS_DIR}" "${D_TEMPLATE_DIR}" "${D_KEY_DIR}"
 
-    # intent: edit template
-    # triggered by edit-template or
-    # inferred when editing something with '--template'
-    # as long as journal-related edit/select flags are absent.
-    if is_flag_enabled "$edit_template" || \
-        { { are_flags_enabled "$edit_something" "$select_template" && \
-                require_file "${template_name}"; } && \
-                    are_flags_disabled "$edit_template" "$edit_journal" \
-            "$select_journal" "$found_journal"; }; then
-        EditTemplate "${template_name}" "${t_content}"; return 0
+    # Concatinate give journal/template
+    if require_var "${cat_something_value}"; then
+        if is_flag_enabled "${cat_journal}"; then
+            f_path="$(DispatchPath journal "${cat_something_value:-default}")"
+            require_regular_file "${f_path}" || \
+                { log error "failed to concatenate journal '${cat_something_value}'"; return 1; }
+            PrettyPrintFile "${f_path}" "cat"
+            return 0
+        elif is_flag_enabled "${cat_template}"; then
+            f_path="$(DispatchPath template "${cat_something_value:-default}")"
+            require_regular_file "${f_path}" || \
+                { log error "failed to concatenate template '${cat_something_value}'"; return 1; }
+            PrettyPrintFile "${f_path}" "cat"
+            return 0
+        fi
+        f_path=$(DispatchPath guess "${cat_something_value}") || \
+            { log error "garbage value '${cat_something_value}'"; return 1; }
+        PrettyPrintFile "${f_path}" "cat"
     fi
 
-    # intent resolution precedence:
+    # List directory contents with comments
+    if { is_flag_enabled "$list_journals" || \
+            is_flag_enabled "$list_templates"; } || \
+                require_var "${list_something_value}"; then
+        is_flag_enabled "$list_journals" && list_something_value="journals"
+        is_flag_enabled "$list_templates" && list_something_value="templates"
+        ListDirectory "${list_something_value}"; return 0
+    fi
+
+    # intent: edit template
+    # triggered by edit-template
+    if is_flag_enabled "$edit_template"; then
+        EditTemplate "${template_name:-default}" "${t_content}" \
+            "${comment_string}"; return 0
+    fi
+
     # intent: edit journal
-    # triggered by edit-journal or
-    # inferred when editing with --journal
-    if are_flags_enabled "$edit_journal" \
-            "$select_template" "$use_something" || \
-                { are_flags_enabled "$edit_something" "$select_journal" \
-                    "$select_template" "$use_something" && \
-                        are_flags_disabled "$show_journal" ; }; then
-        log debug "EditJournal '${f_journal_file}' '${template_name}' '${t_content}'"
-        EditJournal "${f_journal_file}" "${template_name}" "${t_content}"; return 0
-    # edit journal (without template)
-    elif are_flags_enabled "$edit_journal" "$use_something" || \
-        { are_flags_enabled "$edit_something" "$select_journal" "$use_something" && \
-            are_flags_disabled "$show_journal"; } ; then
-        log debug "EditJournal '${f_journal_file}' '[none]' '${t_content}'"
-        EditJournal "${f_journal_file}" "" "${t_content}"; return 0
-    # edit journal (without content)
-    elif are_flags_enabled "$edit_journal" "$select_template" || \
-        { are_flags_enabled "$edit_something" "$select_journal" "$select_template" && \
-            are_flags_disabled "$show_journal"; } ; then
-        log debug "EditJournal '${f_journal_file}' '${template_name}' '[none]'"
-        EditJournal "${f_journal_file}" "${template_name}" ""; return 0
-    # edit journal (without template/content)
-    elif are_flags_enabled "$edit_journal" || \
-        { are_flags_enabled "$edit_something" "$select_journal" && \
-            are_flags_disabled "$show_journal"; } ; then
-        log debug "EditJournal '${f_journal_file}' '[none]' '[none]'"
-        EditJournal "${f_journal_file}" "" ""; return 0
+    # triggered by edit-journal
+    if are_flags_enabled "$edit_journal"; then
+        EditJournal "${journal_name:-default}" "${template_name}" \
+            "${t_content}" "${comment_string}"; return 0
+    fi
+
+    # infer standalone 'edit'
+    if is_flag_enabled "$edit_something"; then
+        if require_var "${something_value}"; then
+            if [[ "${something_value}" == today ]] && \
+                    f_path="$(DispatchPath journal "${something_value:-default}")"; then
+                EditJournal "${f_path}" "${template_name}" "${t_content}" \
+                    "${comment_string}"; return 0
+            elif f_path="$(DispatchPath journal "${something_value}")"; then
+                EditJournal "${f_path}" "${template_name}" "${t_content}" \
+                    "${comment_string}"; return 0
+            else
+                f_path="$(DispatchPath template "${something_value}")" || \
+                    { log error "'${something_value}' not found --" \
+                        "use edit-journal/edit-template to create"; return 1; }
+                EditTemplate "${f_path}" "${t_content}" "${comment_string}"; return 0
+            fi
+        elif is_flag_enabled "${select_journal}"; then
+            EditJournal "${journal_name:-default}" "${template_name}" "${t_content}" \
+                "${comment_string}"; return 0
+        elif is_flag_enabled "${select_template}"; then
+            EditTemplate "${template_name:-default}" "${t_content}" "${comment_string}"
+            return 0
+        else
+            log help_info "'edit' but what?" \
+                "express --template or --journal after 'edit' or give a value"; return 1
+        fi
     fi
 
     # show journal
     if is_flag_enabled "$show_journal" || \
-        is_flag_enabled "$show_something" "$select_journal"; then
-        PrettyPrintFile "${f_journal_file}" "yes"; return 0
-    fi
-
+        are_flags_enabled "$show_something" "$select_journal"; then
+        PrettyPrintFile "$(DispatchPath journal "${journal_name:-default}")" \
+            "pager"; return 0
     # show template
-    if is_flag_enabled "$show_template" || \
-        is_flag_enabled "$show_something" "$select_template"; then
-        PrettyPrintFile "$(FindTemplate "${template_name:-default}" 2>/dev/null)" "no"; return 0
-    fi
-
-    # intent: infer standalone edit/show
-    local full_path=""
-    if is_flag_enabled "$edit_something"; then
-        require_var "${something_value}" || \
-            { log help_info "'edit' but what?" \
-"express --template or --journal after 'edit' or give a value"; return 1; }
-        if full_path="$(FindJournal "${something_value}" full_path 2>/dev/null)"; then
-            { require_file "${full_path}" && EditJournal "${full_path}"; } || \
-                { log error "garbage value '${something_value}'"; }
-        elif full_path="$(FindTemplate "${something_value}" 2>/dev/null)"; then
-            { require_file "${full_path}" && EditTemplate "${full_path}"; } || \
-                { log error "garbage value '${something_value}'"; }
-        else
-            log error "garbage value '${something_value}'"
-        fi
-    fi
-    if is_flag_enabled "$show_something"; then
+    elif is_flag_enabled "$show_template" || \
+        are_flags_enabled "$show_something" "$select_template"; then
+        PrettyPrintFile "$(DispatchPath template "${template_name:-default}")" \
+            "pager"; return 0
+    # infer standalone 'show'
+    elif is_flag_enabled "$show_something"; then
         require_var "${something_value}" || \
             { log help_info "'show' but what?" \
-"express --template or --journal after 'show' or give a value"; return 1; }
-        if full_path="$(FindJournal "${something_value}" full_path 2>/dev/null)"; then
-            { require_file "${full_path}" && PrettyPrintFile "${full_path}"; } || \
-                { log error "garbage value '${something_value}'"; }
-        elif full_path="$(FindTemplate "${something_value}" 2>/dev/null)"; then
-            { require_file "${full_path}" && PrettyPrintFile "${full_path}"; } || \
-                { log error "garbage value '${something_value}'"; }
-        else
-            log error "garbage value '${something_value}'"
-        fi
+                "express --template or --journal after 'show' or give a value"; return 1; }
+        f_path="$(DispatchPath guess "${something_value}")" || \
+            { log error "garbage value '${something_value}'"; return 1; }
+        PrettyPrintFile "${f_path}" "pager"
+        return 0
     fi
 }
 
