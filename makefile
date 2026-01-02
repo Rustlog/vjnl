@@ -1,7 +1,7 @@
 .PHONY: install uninstall purge remove bash symlink source install-bash uninstall-project
 
 PROJECT_NAME := vjournal
-PROJECT_PATH := .
+PROJECT_PATH := ./bin
 PREFIX := /usr/local
 BIN_DIR := $(PREFIX)/bin
 MAN_SECTION := 1
@@ -35,7 +35,7 @@ ifneq ($(shell id -u),0)
 $(error run make as root)
 endif
 
-## methdo must not be empty
+## default method if not given
 ifeq ($(METHOD),)
 METHOD := bash
 endif
@@ -61,9 +61,9 @@ uninstall:
 	@$(MAKE) --no-print-directory uninstall-project
 
 build:
-	@printf '%s\n' "help2man -N --locale=en_US.UTF-8 $(PROJECT_PATH)/$(PROJECT_NAME) -o ./doc/man/$(MAN_NAME)"
-	@mkdir -p ./doc/man
-	@env FULL_USAGE=yes help2man -N --locale="en_US.UTF-8" "$(PROJECT_PATH)/$(PROJECT_NAME)" -o ./"doc/man/$(MAN_NAME)"
+	@printf '%s\n' "help2man -N --locale=en_US.UTF-8 $(PROJECT_PATH)/$(PROJECT_NAME) -o ./man/$(MAN_NAME)"
+	@mkdir -p ./man/
+	@env FULL_USAGE=yes help2man -N --locale="en_US.UTF-8" "$(PROJECT_PATH)/$(PROJECT_NAME)" -o ./"man/$(MAN_NAME)"
 
 install-bash:
 	@printf '%s\n' "install -m0755 -oroot -groot $(PROJECT_PATH)/$(PROJECT_NAME) $(BIN_DIR)/$(PROJECT_NAME)"
@@ -71,10 +71,7 @@ install-bash:
 	@{ install -m0755 -oroot -groot "$(PROJECT_PATH)/$(PROJECT_NAME)" "$(BIN_DIR)/$(PROJECT_NAME)" && \
 		printf '[info]: %s\n' "successful install \`$(BIN_DIR)/$(PROJECT_NAME)\`"; } || \
 		printf '[error]: %s\n' "installation failed \`$(BIN_DIR)/$(PROJECT_NAME)\`"
-	@printf '%s\n' "install -m0755 -oroot -groot ./doc/man/$(MAN_NAME) $(MAN_DIR)/$(MAN_NAME)"
-	@{ install -m0755 -oroot -groot ."/doc/man/$(MAN_NAME)" "$(MAN_DIR)/$(MAN_NAME)" && \
-		printf '[info]: %s\n' "successful install \`$(MAN_DIR)/$(MAN_NAME)\`"; } || \
-		printf '[error]: %s\n' "installation failed \`$(MAN_DIR)/$(MAN_NAME)\`"
+	@$(MAKE) --no-print-directory install-man
 
 install-symlink:
 	@printf '%s\n' "ln -sf $(shell readlink -f "$(PROJECT_PATH)/$(PROJECT_NAME)") $(BIN_DIR)/$(PROJECT_NAME)"
@@ -82,8 +79,11 @@ install-symlink:
 	@{ ln -sf "$(shell readlink -f "$(PROJECT_PATH)/$(PROJECT_NAME)")" "$(BIN_DIR)/$(PROJECT_NAME)" && \
 		printf '[info]: %s\n' "successful created symlink \`$(BIN_DIR)/$(PROJECT_NAME)\`"; } || \
 		printf '[error]: %s\n' "failed to create symlink \`$(BIN_DIR)/$(PROJECT_NAME)\`"
-	@printf '%s\n' "install -m0755 -oroot -groot ./doc/man/$(MAN_NAME) $(MAN_DIR)/$(MAN_NAME)"
-	@{ install -m0755 -oroot -groot ./"doc/man/$(MAN_NAME)" "$(MAN_DIR)/$(MAN_NAME)" && \
+	@$(MAKE) --no-print-directory install-man
+
+install-man:
+	@printf '%s\n' "install -m0755 -oroot -groot ./man/$(MAN_NAME) $(MAN_DIR)/$(MAN_NAME)"
+	@{ install -m0755 -oroot -groot ./"man/$(MAN_NAME)" "$(MAN_DIR)/$(MAN_NAME)" && \
 		printf '[info]: %s\n' "successful install \`$(MAN_DIR)/$(MAN_NAME)\`"; } || \
 		printf '[error]: %s\n' "installation failed \`$(MAN_DIR)/$(MAN_NAME)\`"
 
