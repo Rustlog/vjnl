@@ -1,18 +1,24 @@
-.PHONY: install uninstall purge remove bash symlink source install-bash uninstall-project
+.PHONY: install uninstall purge remove bash symlink source install-bash uninstall-project install-completion
 
-PROJECT_NAME := vjournal
 PROJECT_PATH := ./bin
+PROJECT_NAME := vjournal
+
 PREFIX := /usr/local
 BIN_DIR := $(PREFIX)/bin
+
 MAN_SECTION := 1
 MAN_DIR := /usr/local/share/man/man$(MAN_SECTION)
 MAN_NAME := $(PROJECT_NAME).$(MAN_SECTION)
+
+COMPLETION_DIR := ./completions
+COMPLETION_FILE := _$(PROJECT_NAME)
+COMPLETION_BIN_DIR := /usr/share/zsh/site-functions
 
 # argument parsing logic
 ACTION := $(word 1, $(MAKECMDGOALS))
 METHOD := $(word 2, $(MAKECMDGOALS))
 VALID_ACTIONS := install uninstall build purge remove
-VALID_METHODS := source bash symlink
+VALID_METHODS := source bash symlink completion
 
 # safety guard
 ifeq ($(MAKELEVEL),0)
@@ -87,15 +93,23 @@ install-man:
 		printf '[info]: %s\n' "successful install \`$(MAN_DIR)/$(MAN_NAME)\`"; } || \
 		printf '[error]: %s\n' "installation failed \`$(MAN_DIR)/$(MAN_NAME)\`"
 
+install-completion:
+	@printf '%s\n' "install -m0644 -oroot -groot $(COMPLETION_DIR)/$(COMPLETION_FILE) $(COMPLETION_BIN_DIR)/$(COMPLETION_FILE)"
+	@{ install -m0644 -oroot -groot "$(COMPLETION_DIR)/$(COMPLETION_FILE)" "$(COMPLETION_BIN_DIR)/$(COMPLETION_FILE)" && \
+		printf '[info]: %s\n' "successful install \`$(COMPLETION_BIN_DIR)/$(COMPLETION_FILE)\`"; } || \
+		printf '[error]: %s\n' "installation failed \`$(COMPLETION_BIN_DIR)/$(COMPLETION_FILE)\`"
+
 uninstall-project:
 	@printf '%s\n' "rm $(BIN_DIR)/$(PROJECT_NAME)"
-	@cd $(BIN_DIR) && { { rm ./"$(PROJECT_NAME)" && \
-		printf '[info]: %s\n' "successful uninstall \`$(BIN_DIR)/$(PROJECT_NAME)\`"; } || \
-		printf '[error]: %s\n' "failed to uninstall \`$(BIN_DIR)/$(PROJECT_NAME)\`"; } || \
-			printf '[error]: %s\n' "failed to chdir \`$(BIN_DIR)\`"
+	@cd $(BIN_DIR) || { printf '[error]: %s\n' "failed to chdir \`$(BIN_DIR)\`"; exit 1; }
+	@{ rm ./"$(PROJECT_NAME)" && printf '[info]: %s\n' "successful uninstall \`$(BIN_DIR)/$(PROJECT_NAME)\`"; } || \
+		printf '[error]: %s\n' "failed to uninstall \`$(BIN_DIR)/$(PROJECT_NAME)\`"
 	@printf '%s\n' "rm $(MAN_DIR)/$(MAN_NAME)"
-	@cd $(MAN_DIR) && { { rm ./"$(MAN_NAME)" && \
-		printf '[info]: %s\n' "successful uninstall \`$(MAN_DIR)/$(MAN_NAME)\`"; } || \
-		printf '[error]: %s\n' "failed to uninstall \`$(MAN_DIR)/$(MAN_NAME)\`"; } || \
-			printf '[error]: %s\n' "failed to chdir \`$(MAN_DIR)\`"
+	@cd $(MAN_DIR) || { printf '[error]: %s\n' "failed to chdir \`$(MAN_DIR)\`"; exit 1; }
+	@{ rm ./"$(MAN_NAME)" && printf '[info]: %s\n' "successful uninstall \`$(MAN_DIR)/$(MAN_NAME)\`"; } || \
+			printf '[error]: %s\n' "failed to uninstall \`$(MAN_DIR)/$(MAN_NAME)\`"
+	@printf '%s\n' "rm $(COMPLETION_BIN_DIR)/$(COMPLETION_FILE)"
+	@cd "$(COMPLETION_BIN_DIR)" || { printf '[error]: %s\n' "failed to chdir \`$(MAN_DIR)\`"; exit 1; }
+	@{ rm ./"$(COMPLETION_FILE)" && printf '[info]: %s\n' "successful uninstall \`$(MAN_DIR)/$(MAN_NAME)\`"; } || \
+			printf '[error]: %s\n' "failed to uninstall \`$(MAN_DIR)/$(MAN_NAME)\`"
 

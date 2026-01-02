@@ -1,0 +1,58 @@
+#compdef vjournal
+
+# vim: sts=4 sw=4 ft=zsh:
+
+function _vjournal() {
+    local prev cur opts global_opts_long section_opts_long section_opts_short section_opts_list
+    local journal_dirs journal_files
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+    journal_dirs="$HOME/dev/journals/spls:$HOME/dev/journals/logs:$HOME/dev/journals/data/templates"
+    global_opts_long="--loglevel --verbose --no-pager \
+            --color --no-color --version --author \
+            --tree-view --license --repo --about --help"
+
+    section_opts_long="--journal --template --use"
+    section_opts_short="-j -t -u"
+    section_opts_list_name="journals templates logs"
+
+    opts="edit-journal edit-template \
+        show-journal show-template \
+        cat-journal cat-template \
+        delete-journal delete-template \
+        copy-journal copy-template \
+        move-journal move-template \
+        edit show cat list delete rename copy"
+
+    # printf '\n' && set -x; echo "Journal dir: ${journal_dir}, COMP_CWORD: ${COMP_CWORD}, prev: ${prev}, cur: ${cur}"; set +x
+    if [[ "$COMP_CWORD" == 1 ]]; then
+        if [[ "$cur" == -* ]]; then
+            COMPREPLY=($(compgen -W "${global_opts_long}" -- ${cur}))
+            return 0
+        fi
+        COMPREPLY=($(compgen -W "${opts}" -- ${cur}))
+        return 0
+    elif [[ "$COMP_CWORD" == 2 ]]; then
+        if [[ "$prev" == list ]]; then
+            COMPREPLY=($(compgen -W "${section_opts_list_name}" -- "${cur}"))
+            return 0
+        else
+            IFS=$':' read -rA total_dirs <<< "${journal_dirs}"
+            journal_files="$(find "${total_dirs[@]}" -mindepth 1 -maxdepth 1 -type f -printf ' %f ')"
+            COMPREPLY=($(compgen -W "${journal_files}" -- "${cur}"))
+            return 0
+        fi
+    elif [[ "$COMP_CWORD" == 3 ]]; then
+        if [[ "$cur" == --* ]]; then
+            COMPREPLY=($(compgen -W "${section_opts_long}" -- ${cur}))
+            return 0
+        elif [[ "$cur" == -* ]]; then
+            COMPREPLY=($(compgen -W "${section_opts_short}" -- ${cur}))
+            return 0
+        fi
+    fi
+}
+
+complete -F _vjournal vjournal
+
