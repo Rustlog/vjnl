@@ -4,52 +4,83 @@
 
 function _vjournal() {
     local prev cur opts global_opts_long section_opts_long section_opts_short section_opts_list
-    local journal_dirs journal_files
+    local journal_dir log_dir template_dir journal_files
+    local -i found_action=0
+
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    journal_dirs="$HOME/dev/journals/spls:$HOME/dev/journals/logs:$HOME/dev/journals/data/templates"
+    journal_dir="$HOME/dev/journals/spls"
+    log_dir="$HOME/dev/journals/logs"
+    template_dir="$HOME/dev/journals/data/templates"
+
+    journal_files="$(find "${journal_dir}" \
+        -mindepth 1 -maxdepth 1 -type f -printf ' %f ')"
+    log_files="$(find "${log_dir}" \
+        -mindepth 1 -maxdepth 1 -type f -printf ' %f ')"
+    template_files="$(find "${template_dir}" \
+        -mindepth 1 -maxdepth 1 -type f -printf ' %f ')"
+    all_files="$(find "${journal_dir}" "${log_dir}" "${template_dir}" \
+        -mindepth 1 -maxdepth 1 -type f -printf ' %f ')"
+    template_files+=" default"
+
     global_opts_long="--loglevel --verbose --no-pager \
             --color --no-color --version --author \
-            --tree-view --license --repo --about --help"
+            --tree-view --license --repo --about --help --full-help"
 
-    section_opts_long="--journal --template --use"
-    section_opts_short="-j -t -u"
+    section_opts_long="--journal --log --template --use"
+    section_opts_short="-j -l -t -u"
     section_opts_list_name="journals templates logs"
+    use_options="default blank"
 
-    opts="edit-journal edit-template \
-        show-journal show-template \
-        cat-journal cat-template \
+    opts="edit-journal edit-template edit-log \
+        show-journal show-template show-log \
+        cat-journal cat-template cat-log \
         delete-journal delete-template \
-        copy-journal copy-template \
-        move-journal move-template \
+        copy-journal copy-template copy-log \
+        move-journal move-template move-log \
         edit show cat list delete rename copy"
 
-    # printf '\n' && set -x; echo "Journal dir: ${journal_dir}, COMP_CWORD: ${COMP_CWORD}, prev: ${prev}, cur: ${cur}"; set +x
-    if [[ "$COMP_CWORD" == 1 ]]; then
+    # [[ "$COMP_CWORD" -ge 1 ]] || return 1
+
+    for cmd in "${COMP_WORDS[@]}"; do
+        for action in ${opts}; do
+            [[ "${cmd}" =~ ^"${action}"$ ]] && found_action=1
+        done
+    done
+
+    if [[ "$found_action" -ne 1 || "$cur" =~ ^(cat|copy|rename|show|edit)$ ]]; then
         if [[ "$cur" == -* ]]; then
-            COMPREPLY=($(compgen -W "${global_opts_long}" -- ${cur}))
-            return 0
-        fi
-        COMPREPLY=($(compgen -W "${opts}" -- ${cur}))
-        return 0
-    elif [[ "$COMP_CWORD" == 2 ]]; then
-        if [[ "$prev" == list ]]; then
-            COMPREPLY=($(compgen -W "${section_opts_list_name}" -- "${cur}"))
-            return 0
+            COMPREPLY=($(compgen -W "${global_opts_long}" -- "${cur}"))
         else
-            IFS=$':' read -rA total_dirs <<< "${journal_dirs}"
-            journal_files="$(find "${total_dirs[@]}" -mindepth 1 -maxdepth 1 -type f -printf ' %f ')"
-            COMPREPLY=($(compgen -W "${journal_files}" -- "${cur}"))
-            return 0
+            COMPREPLY=($(compgen -W "${opts}" -- "${cur}"))
         fi
-    elif [[ "$COMP_CWORD" == 3 ]]; then
-        if [[ "$cur" == --* ]]; then
-            COMPREPLY=($(compgen -W "${section_opts_long}" -- ${cur}))
-            return 0
-        elif [[ "$cur" == -* ]]; then
-            COMPREPLY=($(compgen -W "${section_opts_short}" -- ${cur}))
-            return 0
+        return 0
+    fi
+
+    if [[ "$cur" == --* ]]; then
+        COMPREPLY=($(compgen -W "${section_opts_long}" -- "${cur}"))
+    elif [[ "$cur" == -* ]]; then
+        COMPREPLY=($(compgen -W "${section_opts_short}" -- "${cur}"))
+    elif [[ "$prev" == list ]]; then
+        COMPREPLY=($(compgen -W "${section_opts_list_name}" -- "${cur}"))
+    elif [[ "$prev" != vjournal && "$prev" == *journal ]]; then
+        COMPREPLY=($(compgen -W "${journal_files}" -- "${cur}"))
+    elif [[ "$prev" == *template ]]; then
+        COMPREPLY=($(compgen -W "${template_files}" -- "${cur}"))
+    elif [[ "$prev" == *log ]]; then
+        COMPREPLY=($(compgen -W "${log_files}" -- "${cur}"))
+    else
+        if [[ "$prev" =~ ^("-j|--journal")$ ]]; then
+            COMPREPLY=($(compgen -W "${journal_files}" -- "${cur}"))
+        elif [[ "$prev" =~ ^("-t|--template")$ ]]; then
+            COMPREPLY=($(compgen -W "${template_files}" -- "${cur}"))
+        elif [[ "$prev" =~ ^("-l|--log")$ ]]; then
+            COMPREPLY=($(compgen -W "${log_files}" -- "${cur}"))
+        elif [[ "$prev" =~ ^("-u|--use")$ ]]; then
+            COMPREPLY=($(compgen -W "${use_options}" -- "${cur}"))
+        else
+            COMPREPLY=($(compgen -W "${all_files}" -- "${cur}"))
         fi
     fi
 }

@@ -1,4 +1,4 @@
-.PHONY: install uninstall purge remove bash symlink source install-bash uninstall-project install-completion
+.PHONY: install uninstall purge remove bash symlink source completion install-bash uninstall-project install-completion
 
 PROJECT_PATH := ./bin
 PROJECT_NAME := vjournal
@@ -10,7 +10,7 @@ MAN_SECTION := 1
 MAN_DIR := /usr/local/share/man/man$(MAN_SECTION)
 MAN_NAME := $(PROJECT_NAME).$(MAN_SECTION)
 
-COMPLETION_DIR := ./completions
+COMPLETION_DIR := ./completion
 COMPLETION_FILE := _$(PROJECT_NAME)
 COMPLETION_BIN_DIR := /usr/share/zsh/site-functions
 

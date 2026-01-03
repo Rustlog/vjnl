@@ -43,6 +43,9 @@ copy given journal/template
 \fB\-j\fR|\-\-journal
 select journal
 .TP
+\fB\-l\fR|\-\-log
+select log
+.TP
 \fB\-t\fR|\-\-template
 select template
 .TP
@@ -88,9 +91,10 @@ show this help
 .SS "notes:"
 .IP
 journals live here (\fI\,~/dev/journals\/\fP).
-\&'edit\-journal' and 'edit\-template' can be used to create new
+\&'edit\-journal', 'edit\-template', 'edit\-log' can be used to create new
 .IP
 entries and immediately edit em. afterwards 'edit' is fine.
+starter example: vjournal edit\-log day=today \fB\-t\fR default \fB\-c\fR 'special day: ...'
 .IP
 \&'edit' and 'show' are more generic, so only existing
 .IP
