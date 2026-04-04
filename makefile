@@ -95,6 +95,7 @@ install-man:
 
 install-completion:
 	@printf '%s\n' "install -m0644 -oroot -groot $(COMPLETION_DIR)/$(COMPLETION_FILE) $(COMPLETION_BIN_DIR)/$(COMPLETION_FILE)"
+	@mkdir -p "$(COMPLETION_BIN_DIR)"
 	@{ install -m0644 -oroot -groot "$(COMPLETION_DIR)/$(COMPLETION_FILE)" "$(COMPLETION_BIN_DIR)/$(COMPLETION_FILE)" && \
 		printf '[info]: %s\n' "successful install \`$(COMPLETION_BIN_DIR)/$(COMPLETION_FILE)\`"; } || \
 		printf '[error]: %s\n' "installation failed \`$(COMPLETION_BIN_DIR)/$(COMPLETION_FILE)\`"

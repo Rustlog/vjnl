@@ -24,7 +24,7 @@
 
 builtin set -euo pipefail
 
-D_JOURNAL_DIR="${HOME}/dev/journals"
+D_JOURNAL_DIR="${JOURNAL_DIR:-${VJOURNAL_DIR:-${HOME}/dev/journals}}"
 D_DATA_DIR="${D_JOURNAL_DIR}/data"
 D_LOG_DIR="${D_JOURNAL_DIR}/logs"
 D_SPLS_DIR="${D_JOURNAL_DIR}/spls"

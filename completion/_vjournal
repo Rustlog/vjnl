@@ -4,24 +4,25 @@
 
 function _vjournal() {
     local prev cur opts global_opts_long section_opts_long section_opts_short section_opts_list
-    local journal_dir log_dir template_dir journal_files
+    local spls_dir log_dir template_dir spls_files
     local -i found_action=0
 
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    journal_dir="$HOME/dev/journals/spls"
-    log_dir="$HOME/dev/journals/logs"
-    template_dir="$HOME/dev/journals/data/templates"
+    journal_directory="${VJOURNAL_DIR:-$HOME/dev/journals}"
+    spls_dir="${journal_directory}/spls"
+    log_dir="${journal_directory}/logs"
+    template_dir="${journal_directory}/data/templates"
 
-    journal_files="$(find "${journal_dir}" \
-        -mindepth 1 -maxdepth 1 -type f -printf ' %f ')"
+    spls_files="$(find "${spls_dir}" \
+        -mindepth 1 -maxdepth 1 -type f -printf ' %f ' 2>/dev/null)"
     log_files="$(find "${log_dir}" \
-        -mindepth 1 -maxdepth 1 -type f -printf ' %f ')"
+        -mindepth 1 -maxdepth 1 -type f -printf ' %f ' 2>/dev/null)"
     template_files="$(find "${template_dir}" \
-        -mindepth 1 -maxdepth 1 -type f -printf ' %f ')"
-    all_files="$(find "${journal_dir}" "${log_dir}" "${template_dir}" \
-        -mindepth 1 -maxdepth 1 -type f -printf ' %f ')"
+        -mindepth 1 -maxdepth 1 -type f -printf ' %f ' 2>/dev/null)"
+    all_files="$(find "${spls_dir}" "${log_dir}" "${template_dir}" \
+        -mindepth 1 -maxdepth 1 -type f -printf ' %f ' 2>/dev/null)"
     template_files+=" default"
 
     global_opts_long="--loglevel --verbose --no-pager \
@@ -65,14 +66,14 @@ function _vjournal() {
     elif [[ "$prev" == list ]]; then
         COMPREPLY=($(compgen -W "${section_opts_list_name}" -- "${cur}"))
     elif [[ "$prev" != vjournal && "$prev" == *journal ]]; then
-        COMPREPLY=($(compgen -W "${journal_files}" -- "${cur}"))
+        COMPREPLY=($(compgen -W "${spls_files}" -- "${cur}"))
     elif [[ "$prev" == *template ]]; then
         COMPREPLY=($(compgen -W "${template_files}" -- "${cur}"))
     elif [[ "$prev" == *log ]]; then
         COMPREPLY=($(compgen -W "${log_files}" -- "${cur}"))
     else
         if [[ "$prev" =~ ^("-j|--journal")$ ]]; then
-            COMPREPLY=($(compgen -W "${journal_files}" -- "${cur}"))
+            COMPREPLY=($(compgen -W "${spls_files}" -- "${cur}"))
         elif [[ "$prev" =~ ^("-t|--template")$ ]]; then
             COMPREPLY=($(compgen -W "${template_files}" -- "${cur}"))
         elif [[ "$prev" =~ ^("-l|--log")$ ]]; then
